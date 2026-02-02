@@ -1,0 +1,162 @@
+// Prisma schema for BotCraft AI
+// This schema defines the core data models without RAG/vector DB integration
+// Future: Vector embeddings and RAG logic will be added as separate services
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed password
+  name      String?
+  isEmailVerified Boolean @default(false)
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+  passwordResetToken       String?
+  passwordResetExpires     DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  chatbots     Chatbot[]
+  chatSessions ChatSession[]
+  apiKeys      ApiKey[]
+  settings     Settings?
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenId   String   @unique // SHA-256 of token for lookup
+  tokenHash String   // Bcrypt hash for verification
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Chatbot {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Configuration (stored as JSON for flexibility)
+  // Future: This will include RAG-specific config when AI is integrated
+  config Json @default("{}")
+
+  // Relations
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents  Document[]
+  chatSessions ChatSession[]
+
+  @@index([userId])
+  @@map("chatbots")
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  chatbotId   String
+  filename    String
+  originalName String
+  filePath    String   // Local file system path
+  fileSize    Int      // Size in bytes
+  mimeType    String
+  uploadedAt  DateTime @default(now())
+
+  // Metadata (no embeddings stored here)
+  // Future: Embeddings will be stored in a separate vector database
+  metadata Json @default("{}")
+
+  // Relations
+  chatbot Chatbot @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+
+  @@index([chatbotId])
+  @@map("documents")
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  chatbotId String
+  userId    String
+  startedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Session metadata
+  metadata Json @default("{}")
+
+  // Relations
+  chatbot Chatbot @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([chatbotId])
+  @@index([userId])
+  @@map("chat_sessions")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  // Future: This will include references to document chunks used in RAG
+  metadata Json @default("{}")
+
+  // Relations
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("messages")
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   // User-friendly name for the key
+  keyHash   String   // Hashed API key (we store hash, not the key itself)
+  lastUsed  DateTime?
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  theme     String   @default("light")
+  language  String   @default("en")
+  notifications Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Additional settings stored as JSON
+  preferences Json @default("{}")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}

@@ -130,13 +130,11 @@ export default function Profile() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Shield className="w-4 h-4" />
-                  Two-Factor Authentication
+                  Authentication
                 </Label>
                 <div className="flex items-center gap-3">
-                  <Badge variant="default" className="bg-green-600">
-                    Enabled
-                  </Badge>
-                  <span className="text-sm text-gray-600">Your account is protected with 2FA</span>
+                  <Badge variant="secondary">Email &amp; Password</Badge>
+                  <span className="text-sm text-gray-600">Sign in using your email and password</span>
                 </div>
               </div>
             </div>
@@ -181,13 +179,6 @@ export default function Profile() {
               <div className="text-sm text-gray-600">Update your password regularly for security</div>
             </div>
             <Button variant="outline">Change</Button>
-          </div>
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
-              <div className="font-medium">Two-Factor Authentication</div>
-              <div className="text-sm text-gray-600">Manage your 2FA settings</div>
-            </div>
-            <Button variant="outline">Manage</Button>
           </div>
         </CardContent>
       </Card>

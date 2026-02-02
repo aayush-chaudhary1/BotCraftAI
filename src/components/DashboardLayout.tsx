@@ -15,12 +15,10 @@ import {
   User
 } from 'lucide-react';
 import { cn } from './ui/utils';
+import { useAuth } from '../contexts/AuthContext';
 
-interface DashboardLayoutProps {
-  onLogout: () => void;
-}
-
-export default function DashboardLayout({ onLogout }: DashboardLayoutProps) {
+export default function DashboardLayout() {
+  const { logout } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
@@ -62,7 +60,7 @@ export default function DashboardLayout({ onLogout }: DashboardLayoutProps) {
               <div className="p-2 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-lg">
                 <Bot className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl text-white">ChatBot Builder</span>
+              <span className="text-xl text-white">BotCraft AI</span>
             </div>
           </div>
 
@@ -102,7 +100,7 @@ export default function DashboardLayout({ onLogout }: DashboardLayoutProps) {
             </Link>
             <Button
               variant="ghost"
-              onClick={onLogout}
+              onClick={() => logout()}
               className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-950/50"
             >
               <LogOut className="w-5 h-5 mr-3" />

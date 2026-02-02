@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -8,14 +8,50 @@ import { Switch } from './ui/switch';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
-import { User, Lock, CreditCard, Users, Bot, Database, Bell, Trash2, Save, LogOut, Shield, Download, Upload, Clock, Monitor, Mail, Smartphone, AlertTriangle, Check, X } from 'lucide-react';
+import { User, Lock, CreditCard, Users, Bot, Database, Bell, Trash2, Save, LogOut, Download, Upload, Clock, Monitor, Mail, Smartphone, AlertTriangle, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
+
+type ActiveSession = {
+  id: number;
+  device: string;
+  location: string;
+  lastActive: string;
+  current: boolean;
+};
+
+type TeamMember = {
+  id: number;
+  name: string;
+  email: string;
+  role: 'admin' | 'editor' | 'viewer';
+  status: 'Active' | 'Pending';
+};
+
+type ServerSettings = {
+  preferences?: {
+    plan?: 'free' | 'pro' | 'enterprise';
+    aiDefaults?: {
+      responseLength: string;
+      tone: string;
+      language: string;
+    };
+    notificationsByType?: {
+      usageLimits: boolean;
+      errors: boolean;
+      updates: boolean;
+      weeklyReports: boolean;
+    };
+  };
+};
 
 export default function Settings() {
+  const { user, isInitialized, getAccessToken, refresh } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [profile, setProfile] = useState({
-    fullName: 'John Doe',
-    email: 'john.doe@example.com',
+    fullName: '',
+    email: '',
   });
 
   const [passwords, setPasswords] = useState({
@@ -24,19 +60,9 @@ export default function Settings() {
     confirm: '',
   });
 
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [activeSessions] = useState<ActiveSession[]>([]);
 
-  const [activeSessions] = useState([
-    { id: 1, device: 'Chrome on Windows', location: 'New York, US', lastActive: '2 minutes ago', current: true },
-    { id: 2, device: 'Safari on iPhone', location: 'New York, US', lastActive: '2 hours ago', current: false },
-    { id: 3, device: 'Firefox on MacOS', location: 'Los Angeles, US', lastActive: '1 day ago', current: false },
-  ]);
-
-  const [teamMembers] = useState([
-    { id: 1, name: 'Sarah Johnson', email: 'sarah@example.com', role: 'Admin', status: 'Active' },
-    { id: 2, name: 'Mike Chen', email: 'mike@example.com', role: 'Editor', status: 'Active' },
-    { id: 3, name: 'Emma Wilson', email: 'emma@example.com', role: 'Viewer', status: 'Pending' },
-  ]);
+  const [teamMembers] = useState<TeamMember[]>([]);
 
   const [aiDefaults, setAiDefaults] = useState({
     responseLength: 'medium',
@@ -50,6 +76,94 @@ export default function Settings() {
     updates: false,
     weeklyReports: true,
   });
+
+  const [plan, setPlan] = useState<'free' | 'pro' | 'enterprise'>('free');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  // Initialize profile from authenticated user
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (!user) return;
+    setProfile({
+      fullName: user.name || '',
+      email: user.email,
+    });
+  }, [isInitialized, user]);
+
+  // Load settings (plan, AI defaults, notification prefs) from backend
+  useEffect(() => {
+    if (!isInitialized || !user || settingsLoaded) return;
+
+    const load = async () => {
+      try {
+        setSettingsLoading(true);
+        setSettingsError(null);
+        const { data, ok } = await api<any>('/api/settings', {
+          retryOn401: true,
+          getAccessToken,
+          refresh,
+        });
+        if (ok && data?.data) {
+          const serverSettings = data.data as ServerSettings;
+          const prefs = serverSettings.preferences || {};
+
+          if (prefs.plan && ['free', 'pro', 'enterprise'].includes(prefs.plan)) {
+            setPlan(prefs.plan);
+          }
+
+          if (prefs.aiDefaults) {
+            setAiDefaults({
+              responseLength: prefs.aiDefaults.responseLength || 'medium',
+              tone: prefs.aiDefaults.tone || 'professional',
+              language: prefs.aiDefaults.language || 'en',
+            });
+          }
+
+          if (prefs.notificationsByType) {
+            setNotifications({
+              usageLimits: prefs.notificationsByType.usageLimits ?? true,
+              errors: prefs.notificationsByType.errors ?? true,
+              updates: prefs.notificationsByType.updates ?? false,
+              weeklyReports: prefs.notificationsByType.weeklyReports ?? true,
+            });
+          }
+        } else if (!ok) {
+          setSettingsError((data as any)?.error || 'Failed to load settings');
+        }
+      } catch (err) {
+        setSettingsError((err as Error).message || 'Failed to load settings');
+      } finally {
+        setSettingsLoading(false);
+        setSettingsLoaded(true);
+      }
+    };
+
+    void load();
+  }, [isInitialized, user, settingsLoaded, getAccessToken, refresh]);
+
+  const savePreferences = async (partial: ServerSettings['preferences']) => {
+    try {
+      await api('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          preferences: {
+            plan,
+            aiDefaults,
+            notificationsByType: notifications,
+            ...(partial || {}),
+          },
+        }),
+        retryOn401: true,
+        getAccessToken,
+        refresh,
+      });
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to save settings');
+      throw err;
+    }
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,15 +192,6 @@ export default function Settings() {
     toast.success('Logged out from all other sessions');
   };
 
-  const handleToggle2FA = () => {
-    setTwoFactorEnabled(!twoFactorEnabled);
-    if (!twoFactorEnabled) {
-      toast.success('Two-factor authentication enabled');
-    } else {
-      toast.success('Two-factor authentication disabled');
-    }
-  };
-
   const handleRevokeSession = (sessionId: number) => {
     toast.success('Session revoked successfully');
   };
@@ -100,7 +205,10 @@ export default function Settings() {
   };
 
   const handleSaveAIDefaults = () => {
-    toast.success('AI behavior defaults saved');
+    savePreferences({ aiDefaults }).then(
+      () => toast.success('AI behavior defaults saved'),
+      () => {/* error toast shown in savePreferences */}
+    );
   };
 
   const handleExportData = () => {
@@ -112,7 +220,10 @@ export default function Settings() {
   };
 
   const handleSaveNotifications = () => {
-    toast.success('Notification preferences saved');
+    savePreferences({ notificationsByType: notifications }).then(
+      () => toast.success('Notification preferences saved'),
+      () => {/* error toast shown in savePreferences */}
+    );
   };
 
   const handleDeleteAccount = () => {
@@ -198,7 +309,7 @@ export default function Settings() {
       <section>
         <div className="mb-4">
           <h2 className="text-2xl mb-1">Security Settings</h2>
-          <p className="text-gray-600 text-sm">Manage your password, two-factor authentication, and active sessions</p>
+          <p className="text-gray-600 text-sm">Manage your password and active sessions</p>
         </div>
 
         <div className="space-y-4">
@@ -257,36 +368,6 @@ export default function Settings() {
             </CardContent>
           </Card>
 
-          {/* Two-Factor Authentication */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Shield className="w-5 h-5 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <CardTitle>Two-Factor Authentication</CardTitle>
-                  <CardDescription>Add an extra layer of security to your account</CardDescription>
-                </div>
-                <Switch
-                  checked={twoFactorEnabled}
-                  onCheckedChange={handleToggle2FA}
-                />
-              </div>
-            </CardHeader>
-            {twoFactorEnabled && (
-              <CardContent>
-                <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <Check className="w-5 h-5 text-green-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-green-900">2FA is enabled</p>
-                    <p className="text-sm text-green-700 mt-1">Your account is protected with two-factor authentication</p>
-                  </div>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
           {/* Active Sessions */}
           <Card>
             <CardHeader>
@@ -301,35 +382,41 @@ export default function Settings() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {activeSessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex items-start gap-3">
-                      <Monitor className="w-5 h-5 text-gray-600 mt-0.5" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm">{session.device}</p>
-                          {session.current && (
-                            <Badge variant="secondary" className="text-xs">Current</Badge>
-                          )}
+              {activeSessions.length === 0 ? (
+                <p className="text-sm text-gray-600">
+                  No active sessions to display yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {activeSessions.map((session) => (
+                    <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-start gap-3">
+                        <Monitor className="w-5 h-5 text-gray-600 mt-0.5" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{session.device}</p>
+                            {session.current && (
+                              <Badge variant="secondary" className="text-xs">Current</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">{session.location}</p>
+                          <p className="text-xs text-gray-500 mt-1">Last active: {session.lastActive}</p>
                         </div>
-                        <p className="text-sm text-gray-600">{session.location}</p>
-                        <p className="text-xs text-gray-500 mt-1">Last active: {session.lastActive}</p>
                       </div>
+                      {!session.current && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleRevokeSession(session.id)}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Revoke
+                        </Button>
+                      )}
                     </div>
-                    {!session.current && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleRevokeSession(session.id)}
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Revoke
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -352,7 +439,7 @@ export default function Settings() {
               </div>
               <div>
                 <CardTitle>Current Plan</CardTitle>
-                <CardDescription>You're on the Pro plan</CardDescription>
+                <CardDescription>Your current subscription plan</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -360,8 +447,16 @@ export default function Settings() {
             {/* Plan Info */}
             <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
               <div>
-                <p className="font-semibold text-lg">Pro Plan</p>
-                <p className="text-sm text-gray-600">$49/month - Renews on Feb 19, 2026</p>
+                <p className="font-semibold text-lg">
+                  {plan === 'pro' ? 'Pro Plan' : plan === 'enterprise' ? 'Enterprise Plan' : 'Free Plan'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {plan === 'pro'
+                    ? '$29/month - Billed monthly'
+                    : plan === 'enterprise'
+                    ? 'Custom pricing - Contact sales'
+                    : '$0/month - Free forever'}
+                </p>
               </div>
               <div className="text-right">
                 <Badge className="bg-indigo-600">Active</Badge>
@@ -430,7 +525,11 @@ export default function Settings() {
                 </div>
                 <div>
                   <CardTitle>Team Members</CardTitle>
-                  <CardDescription>3 members · 2 seats available</CardDescription>
+                  <CardDescription>
+                    {teamMembers.length === 0
+                      ? 'No team members yet'
+                      : `${teamMembers.length} member${teamMembers.length > 1 ? 's' : ''}`}
+                  </CardDescription>
                 </div>
               </div>
               <Button onClick={handleInviteMember}>
@@ -440,43 +539,49 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {teamMembers.map((member) => (
-                <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                      {member.name.split(' ').map(n => n[0]).join('')}
+            {teamMembers.length === 0 ? (
+              <p className="text-sm text-gray-600">
+                You haven&apos;t added any team members yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {teamMembers.map((member) => (
+                  <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+                        {member.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{member.name}</p>
+                        <p className="text-sm text-gray-600">{member.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{member.name}</p>
-                      <p className="text-sm text-gray-600">{member.email}</p>
+                    <div className="flex items-center gap-3">
+                      <Select defaultValue={member.role.toLowerCase()}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="editor">Editor</SelectItem>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Badge variant={member.status === 'Active' ? 'default' : 'secondary'}>
+                        {member.status}
+                      </Badge>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleRemoveMember(member.name)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Select defaultValue={member.role.toLowerCase()}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="editor">Editor</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Badge variant={member.status === 'Active' ? 'default' : 'secondary'}>
-                      {member.status}
-                    </Badge>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => handleRemoveMember(member.name)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>

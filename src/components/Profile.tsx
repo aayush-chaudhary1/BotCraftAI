@@ -7,16 +7,35 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { User, Mail, Calendar, Shield, Edit2, Save, X } from 'lucide-react';
 import { Badge } from './ui/badge';
 
+import { useAuth } from '../contexts/AuthContext';
+
 export default function Profile() {
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState({
-    name: 'John Doe',
-    email: 'john.doe@example.com',
+    name: user?.name || 'User',
+    email: user?.email || '',
     joinedDate: 'January 2026',
     accountType: 'Free Plan',
   });
 
   const [editData, setEditData] = useState({ ...userData });
+
+  // Update local state when user context changes
+  React.useEffect(() => {
+    if (user) {
+      setUserData(prev => ({
+        ...prev,
+        name: user.name || 'User',
+        email: user.email || '',
+      }));
+      setEditData(prev => ({
+        ...prev,
+        name: user.name || 'User',
+        email: user.email || '',
+      }));
+    }
+  }, [user]);
 
   const handleSave = () => {
     setUserData(editData);

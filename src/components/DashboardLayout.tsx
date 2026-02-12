@@ -1,13 +1,13 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Settings, 
-  Bot, 
-  BarChart3, 
-  MessageSquare, 
+import {
+  LayoutDashboard,
+  FileText,
+  Settings,
+  Bot,
+  BarChart3,
+  MessageSquare,
   Rocket,
   LogOut,
   Menu,
@@ -17,7 +17,11 @@ import {
 import { cn } from './ui/utils';
 import { useAuth } from '../contexts/AuthContext';
 
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+
 export default function DashboardLayout() {
+  const navigate = useNavigate();
   const { logout } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -67,12 +71,35 @@ export default function DashboardLayout() {
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
-              const isActive = location.pathname.startsWith(item.href.split('/')[1] === 'dashboard' ? '/dashboard' : `/${item.href.split('/')[1]}`);
+              const activeId = typeof localStorage !== 'undefined' ? localStorage.getItem('activeChatbotId') : null;
+
+              // If link is specific to a chatbot (not dashboard/settings), use dynamic ID
+              let targetHref = item.href;
+              const needsId = ['/knowledge-base', '/config', '/preview', '/deploy', '/analytics'].some(prefix => item.href.startsWith(prefix));
+
+              if (needsId) {
+                if (activeId) {
+                  // Replace /demo or any placeholder with real ID
+                  targetHref = item.href.replace(/\/demo$/, `/${activeId}`);
+                }
+              }
+
+              const isActive = location.pathname.startsWith(item.href.split('/')[1] === 'dashboard' ? '/dashboard' : `/${targetHref.split('/')[1]}`);
+
+              const handleClick = (e: React.MouseEvent) => {
+                setMobileMenuOpen(false);
+                if (needsId && !activeId) {
+                  e.preventDefault();
+                  toast.error('Please select a chatbot from the Dashboard first');
+                  navigate('/dashboard');
+                }
+              };
+
               return (
                 <Link
                   key={item.name}
-                  to={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
+                  to={targetHref}
+                  onClick={handleClick}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all',
                     isActive

@@ -1,0 +1,32 @@
+ts-jest[config] (WARN) 
+    The "ts-jest" config option "isolatedModules" is deprecated and will be removed in v30.0.0. Please use "isolatedModules: true" in C:/Project2/BotCraftAI/backend/tsconfig.json instead, see https://www.typescriptlang.org/tsconfig/#isolatedModules
+  
+FAIL src/services/verify_phase5.test.ts
+  ● Test suite failed to run
+
+    [96msrc/services/verify_phase5.test.ts[0m:[93m118[0m:[93m26[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+    [7m118[0m                 chatbotId: mockChatbotId,
+    [7m   [0m [91m                         ~[0m
+    [96msrc/services/verify_phase5.test.ts[0m:[93m119[0m:[93m29[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+    [7m119[0m                     filePath: '/tmp/test.pdf',
+    [7m   [0m [91m                            ~[0m
+    [96msrc/services/verify_phase5.test.ts[0m:[93m120[0m:[93m32[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+    [7m120[0m                         chatbot: { userId: mockUserId }
+    [7m   [0m [91m                               ~[0m
+    [96msrc/services/verify_phase5.test.ts[0m:[93m129[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+    [7m129[0m });
+    [7m   [0m [91m~[0m
+    [96msrc/services/verify_phase5.test.ts[0m:[93m129[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+    [7m129[0m });
+    [7m   [0m [91m ~[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        0.426 s
+Ran all test suites matching /src\\services\\verify_phase5.test.ts/i.

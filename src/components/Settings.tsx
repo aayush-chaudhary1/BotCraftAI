@@ -207,7 +207,7 @@ export default function Settings() {
   const handleSaveAIDefaults = () => {
     savePreferences({ aiDefaults }).then(
       () => toast.success('AI behavior defaults saved'),
-      () => {/* error toast shown in savePreferences */}
+      () => {/* error toast shown in savePreferences */ }
     );
   };
 
@@ -222,7 +222,7 @@ export default function Settings() {
   const handleSaveNotifications = () => {
     savePreferences({ notificationsByType: notifications }).then(
       () => toast.success('Notification preferences saved'),
-      () => {/* error toast shown in savePreferences */}
+      () => {/* error toast shown in savePreferences */ }
     );
   };
 
@@ -246,7 +246,7 @@ export default function Settings() {
           <h2 className="text-2xl mb-1">Account Settings</h2>
           <p className="text-gray-600 text-sm">Manage your personal information and account preferences</p>
         </div>
-        
+
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -404,8 +404,8 @@ export default function Settings() {
                         </div>
                       </div>
                       {!session.current && (
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleRevokeSession(session.id)}
                         >
@@ -454,8 +454,8 @@ export default function Settings() {
                   {plan === 'pro'
                     ? '$29/month - Billed monthly'
                     : plan === 'enterprise'
-                    ? 'Custom pricing - Contact sales'
-                    : '$0/month - Free forever'}
+                      ? 'Custom pricing - Contact sales'
+                      : '$0/month - Free forever'}
                 </p>
               </div>
               <div className="text-right">
@@ -570,8 +570,8 @@ export default function Settings() {
                       <Badge variant={member.status === 'Active' ? 'default' : 'secondary'}>
                         {member.status}
                       </Badge>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveMember(member.name)}
                       >
@@ -737,7 +737,7 @@ export default function Settings() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete all chatbot data?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete all chatbot conversations and documents. 
+                      This will permanently delete all chatbot conversations and documents.
                       Your chatbot configurations will be preserved. This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -790,7 +790,7 @@ export default function Settings() {
                 </div>
                 <Switch
                   checked={notifications.usageLimits}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setNotifications({ ...notifications, usageLimits: checked })
                   }
                 />
@@ -806,7 +806,7 @@ export default function Settings() {
                 </div>
                 <Switch
                   checked={notifications.errors}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setNotifications({ ...notifications, errors: checked })
                   }
                 />
@@ -822,7 +822,7 @@ export default function Settings() {
                 </div>
                 <Switch
                   checked={notifications.updates}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setNotifications({ ...notifications, updates: checked })
                   }
                 />
@@ -838,7 +838,7 @@ export default function Settings() {
                 </div>
                 <Switch
                   checked={notifications.weeklyReports}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setNotifications({ ...notifications, weeklyReports: checked })
                   }
                 />

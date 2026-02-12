@@ -1,22 +1,82 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Upload, FileText, X, CheckCircle, File, ArrowRight } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, File, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 interface UploadedFile {
   id: string;
   name: string;
   size: string;
   type: string;
-  status: 'uploading' | 'complete';
+  status: 'uploading' | 'complete' | 'error';
+  ingestionStatus?: 'processing' | 'ready' | 'failed';
 }
 
 export default function KnowledgeBase() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>(); // chatbotId
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!id) {
+      toast.error('Please select a chatbot first');
+      navigate('/dashboard');
+      return;
+    }
+    loadDocuments();
+  }, [id, navigate]);
+
+  // Polling for processing status
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const hasProcessing = files.some(f => f.ingestionStatus === 'processing');
+
+    if (hasProcessing) {
+      timeoutId = setTimeout(() => {
+        loadDocuments(true);
+      }, 3000);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [files]);
+
+  const loadDocuments = async (silent = false) => {
+    if (!id) return;
+    if (!silent) setIsLoading(true);
+    try {
+      // api() now unwraps response.data if success=true, so getting <any> allows checking if it's an array directly
+      const { data, ok } = await api<any>(`/api/chatbots/${id}/documents`);
+
+      // Robust check: it might be the array, or still wrapped if something changed
+      const docs = Array.isArray(data) ? data : data?.data;
+
+      if (ok && Array.isArray(docs)) {
+        setFiles(docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.title || doc.filename || 'Untitled',
+          size: doc.fileSize ? `${(doc.fileSize / 1024 / 1024).toFixed(2)} MB` : 'Unknown',
+          type: doc.mimeType ? doc.mimeType.split('/').pop()?.toUpperCase() : 'FILE',
+          status: 'complete',
+          ingestionStatus: doc.metadata?.ingestionStatus || 'processing',
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to load documents', err);
+      if (!silent) toast.error('Failed to load documents');
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  };
+
+  // ... (loadDocuments)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -27,46 +87,88 @@ export default function KnowledgeBase() {
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    // Mock file handling
-    const newFile: UploadedFile = {
-      id: Date.now().toString(),
-      name: 'new-document.pdf',
-      size: '1.2 MB',
-      type: 'PDF',
-      status: 'uploading',
-    };
-    setFiles([...files, newFile]);
-    setTimeout(() => {
-      setFiles(prev => prev.map(f => 
-        f.id === newFile.id ? { ...f, status: 'complete' } : f
-      ));
-    }, 2000);
-  };
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const newFile: UploadedFile = {
-        id: Date.now().toString(),
-        name: file.name,
-        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-        type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
-        status: 'uploading',
-      };
-      setFiles([...files, newFile]);
-      setTimeout(() => {
-        setFiles(prev => prev.map(f => 
-          f.id === newFile.id ? { ...f, status: 'complete' } : f
-        ));
-      }, 2000);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFile(e.dataTransfer.files[0]);
     }
   };
 
-  const removeFile = (id: string) => {
-    setFiles(files.filter(f => f.id !== id));
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await uploadFile(e.target.files[0]);
+    }
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!id) return;
+
+    // Optimistic UI update
+    const tempId = Date.now().toString();
+    const newFile: UploadedFile = {
+      id: tempId,
+      name: file.name,
+      size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+      type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
+      status: 'uploading',
+      ingestionStatus: 'processing',
+    };
+
+    setFiles(prev => [...prev, newFile]);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      console.log('Uploading file:', file.name, 'to chatbot:', id);
+
+      const { ok, status, data } = await api(`/api/chatbots/${id}/documents`, {
+        method: 'POST',
+        body: formData,
+        // Important: Do NOT set Content-Type header for FormData, browser does it with boundary
+      });
+
+      console.log('Upload response:', status, data);
+
+      if (ok) {
+        toast.success('File uploaded successfully');
+        loadDocuments(true); // Refresh list to get real ID and status
+      } else {
+        throw new Error((data as any)?.error || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload Error:', err);
+      toast.error('Failed to upload file');
+      setFiles(prev => prev.filter(f => f.id !== tempId)); // Remove temp file on error
+    }
+  };
+
+  const removeFile = async (documentId: string) => {
+    // If it's a temp file (still uploading), don't try to delete from backend
+    if (!documentId.includes('-') && documentId.length < 20) { // Simple check for temp numeric ID
+      setFiles(prev => prev.filter(f => f.id !== documentId));
+      return;
+    }
+
+    try {
+      const prevFiles = files;
+      setFiles(files.filter(f => f.id !== documentId));
+
+      const { ok } = await api(`/api/documents/${documentId}`, {
+        method: 'DELETE',
+      });
+
+      if (ok) {
+        toast.success('Document deleted');
+      } else {
+        setFiles(prevFiles); // Revert
+        toast.error('Failed to delete document');
+      }
+    } catch (err) {
+      toast.error('Error deleting document');
+    }
   };
 
   return (
@@ -92,11 +194,10 @@ export default function KnowledgeBase() {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-              isDragging
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-gray-400'
-            }`}
+            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${isDragging
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 hover:border-gray-400'
+              }`}
           >
             <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-lg mb-2">
@@ -152,10 +253,12 @@ export default function KnowledgeBase() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {file.status === 'complete' ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    {file.ingestionStatus === 'processing' ? (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    ) : file.ingestionStatus === 'failed' ? (
+                      <AlertCircle className="w-5 h-5 text-red-600" />
                     ) : (
-                      <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <CheckCircle className="w-5 h-5 text-green-600" />
                     )}
                     <Button
                       variant="ghost"
@@ -189,7 +292,7 @@ export default function KnowledgeBase() {
         <Button variant="outline" onClick={() => navigate('/dashboard')}>
           Back to Dashboard
         </Button>
-        <Button onClick={() => navigate('/config/demo')} disabled={files.length === 0}>
+        <Button onClick={() => navigate(`/config/${id}`)} disabled={files.length === 0}>
           Continue to Configuration
           <ArrowRight className="w-4 h-4 ml-2" />
         </Button>

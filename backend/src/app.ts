@@ -51,8 +51,8 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api', documentRoutes); // Mount specific routes before generic /api/chatbots prefix
 app.use('/api/chatbots', chatbotRoutes);
-app.use('/api', documentRoutes);
 app.use('/api', chatRoutes);
 app.use('/api/settings', settingsRoutes);
 

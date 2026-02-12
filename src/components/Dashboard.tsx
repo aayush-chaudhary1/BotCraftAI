@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { toast } from 'sonner';
+import { api } from '../lib/api';
 
 type Chatbot = {
   id: string;
@@ -28,19 +29,51 @@ type Chatbot = {
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [chatbotToDelete, setChatbotToDelete] = useState<Chatbot | null>(null);
+
+  // Load chatbots on mount
+  useEffect(() => {
+    loadChatbots();
+  }, []);
+
+  const loadChatbots = async () => {
+    try {
+      const { data, ok } = await api<Chatbot[]>('/api/chatbots');
+      if (ok && Array.isArray(data)) {
+        setChatbots(data);
+      }
+    } catch (err) {
+      console.error('Failed to load chatbots', err);
+      toast.error('Failed to load chatbots');
+    }
+  };
+
+  const handeChatbotClick = (id: string, path: string) => {
+    localStorage.setItem('activeChatbotId', id);
+    navigate(path);
+  };
 
   const handleDeleteClick = (chatbot: Chatbot) => {
     setChatbotToDelete(chatbot);
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (chatbotToDelete) {
-      setChatbots(chatbots.filter(c => c.id !== chatbotToDelete.id));
-      toast.success(`Chatbot "${chatbotToDelete.name}" has been deleted`);
+      try {
+        const { ok } = await api(`/api/chatbots/${chatbotToDelete.id}`, { method: 'DELETE' });
+        if (ok) {
+          setChatbots(chatbots.filter(c => c.id !== chatbotToDelete.id));
+          toast.success(`Chatbot "${chatbotToDelete.name}" has been deleted`);
+        } else {
+          toast.error('Failed to delete chatbot');
+        }
+      } catch (err) {
+        toast.error('Error deleting chatbot');
+      }
       setDeleteDialogOpen(false);
       setChatbotToDelete(null);
     }
@@ -73,7 +106,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-4xl mb-1">0</div>
+                <div className="text-4xl mb-1">{chatbots.length}</div>
                 <div className="text-xs text-gray-500">All time</div>
               </div>
               <div className="p-3 bg-blue-100 rounded-xl">
@@ -90,11 +123,13 @@ export default function Dashboard() {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-4xl mb-1">0</div>
-                <div className="text-xs text-gray-500">None active</div>
+                <div className="text-4xl mb-1">
+                  {chatbots.filter(c => c.status === 'active').length}
+                </div>
+                <div className="text-xs text-gray-500">Currently active</div>
               </div>
               <div className="p-3 bg-green-100 rounded-xl">
-                <div className="w-3 h-3 bg-gray-300 rounded-full" />
+                <div className="w-3 h-3 bg-green-500 rounded-full" />
               </div>
             </div>
           </CardContent>
@@ -107,7 +142,9 @@ export default function Dashboard() {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-4xl mb-1">0</div>
+                <div className="text-4xl mb-1">
+                  {chatbots.reduce((acc, c) => acc + (c.documents || 0), 0)}
+                </div>
                 <div className="text-xs text-gray-500">Knowledge base</div>
               </div>
               <div className="p-3 bg-purple-100 rounded-xl">
@@ -124,8 +161,10 @@ export default function Dashboard() {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-4xl mb-1">0</div>
-                <div className="text-xs text-gray-500">No conversations yet</div>
+                <div className="text-4xl mb-1">
+                  {chatbots.reduce((acc, c) => acc + (c.conversations || 0), 0)}
+                </div>
+                <div className="text-xs text-gray-500">Total conversations</div>
               </div>
               <div className="p-3 bg-orange-100 rounded-xl">
                 <MessageSquare className="w-8 h-8 text-orange-600" />
@@ -138,7 +177,7 @@ export default function Dashboard() {
       {/* Chatbot List */}
       <div>
         <h2 className="text-xl mb-4">Your Chatbots</h2>
-        
+
         {chatbots.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
@@ -191,14 +230,21 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Link to={`/config/${chatbot.id}`} className="flex-1">
-                      <Button variant="outline" className="w-full">Configure</Button>
-                    </Link>
-                    <Link to={`/preview/${chatbot.id}`} className="flex-1">
-                      <Button className="w-full">Preview</Button>
-                    </Link>
-                    <Button 
-                      variant="destructive" 
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => handeChatbotClick(chatbot.id, `/config/${chatbot.id}`)}
+                    >
+                      Configure
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={() => handeChatbotClick(chatbot.id, `/preview/${chatbot.id}`)}
+                    >
+                      Preview
+                    </Button>
+                    <Button
+                      variant="destructive"
                       size="icon"
                       onClick={() => handleDeleteClick(chatbot)}
                     >

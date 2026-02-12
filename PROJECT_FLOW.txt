@@ -1,0 +1,110 @@
+BOTCRAFT AI - PROJECT OVERVIEW & FLOW GUIDE
+
+This document explains the complete workflow of the BotCraftAI system, from chatbot creation to document ingestion and deployment.
+
+----------------------------------------------------------------------------------------------------
+1. PROJECT ARCHITECTURE OVERVIEW
+
+BotCraftAI is a full-stack SaaS platform for building custom, data-driven AI chatbots.
+
+A. Frontend (React + Vite + Tailwind):
+   - Located in `/src` (and project root).
+   - Handles user interface, dashboard, configuration, and chat preview.
+   - Communicates with Backend via `/api/*`.
+
+B. Backend (Node.js + Express + Prisma + PostgreSQL):
+   - Located in `/backend`.
+   - Manages Users, Authentication (JWT), Chatbots, and Chat Sessions.
+   - Stores metadata about uploaded documents.
+   - Proxies chat requests to the RAG service (or handles basic responses).
+
+C. RAG Service (Python + FastAPI + ChromaDB):
+   - Located in `/newrag`.
+   - Handles document processing (PDF/TXT), chunking, embedding generation.
+   - Stores vector embeddings in ChromaDB for semantic search.
+   - Retrieves relevant context for answers.
+
+----------------------------------------------------------------------------------------------------
+2. CORE USER FLOW
+
+STEP 1: AUTHENTICATION
+- User Visits: `/login` or `/signup`.
+- Action: Enters email/password.
+- Backend: Verifies credentials, issues JWT token.
+- Frontend: Stores token in localStorage (`token`) for subsequent API calls.
+- Redirects to `/dashboard`.
+
+STEP 2: DASHBOARD
+- View: Lists all created chatbots.
+- Actions:
+  - Create New Chatbot
+  - Manage existing chatbots (Delete, Edit)
+  - Navigate to Account Settings (`/settings`).
+
+STEP 3: CHATBOT CREATION
+- User clicks "Create Chatbot".
+- Form: Enters Name, Description, and base Language.
+- Backend: Creates a `Chatbot` record in PostgreSQL.
+- Redirect: Automatically navigates to the **Knowledge Base** (`/knowledge-base/:id`) for the new bot.
+
+STEP 4: KNOWLEDGE BASE (RAG INGESTION)
+- Purpose: Upload documents that the AI will use as its "brain".
+- User: Uploads PDF, TXT, or DOCX files.
+- Backend Flow:
+  1. Receives file upload (`POST /api/chatbots/:id/documents`).
+  2. Saves file metadata to database (Status: `processing`).
+  3. Triggers RAG Service to process file.
+  4. RAG Service extracts text -> chunks text -> generates embeddings -> stores in Vector DB.
+  5. Updates database status to `ready`.
+- UI: Shows ingestion status (Processing/Ready/Failed) and allows deletion.
+
+STEP 5: CONFIGURATION & CUSTOMIZATION
+- Page: `/config/:id`
+- User Can Customize:
+  - Identity: Bot Name, Avatar (emoji/icon).
+  - Behavior: Greeting Message, Tone, Response Length.
+  - Appearance: Primary Color, Accent Color, Light/Dark Theme.
+  - Branding: Widget Title, Placeholder Text.
+- Backend: Saves these settings as a JSON object in the `Chatbot` record.
+
+STEP 6: PREVIEW & TESTING
+- Page: `/preview/:id`
+- Features:
+  - Fully functional chat interface reflecting custom colors/theme.
+  - Real-time chat with the backend.
+  - Session Persistence: Continuing a conversation even after refresh.
+- Backend Flow (`POST /api/chatbots/:id/chat`):
+  1. Receives user message & session ID.
+  2. Retrieves conversation history.
+  3. (Future/RAG) Queries Vector DB for context.
+  4. Generates AI response.
+  5. Returns response + session ID.
+
+STEP 7: DEPLOYMENT
+- Page: `/deploy/:id`
+- Action: Generates a JavaScript snippet (`<script>`) or iframe code.
+- User: Copies this code to their own website (Wordpress, Shopify, Custom HTML).
+- Result: The chatbot widget appears on their site, using the configured appearance and knowledge base.
+
+----------------------------------------------------------------------------------------------------
+3. KEY FEATURES SUMMARY
+
+- **Customizability**: Full control over look and feel (colors, avatars, themes).
+- **RAG (Retrieval-Augmented Generation)**: Answers are based *strictly* on your uploaded documents, reducing hallucinations.
+- **Session Management**: Persistent chat sessions for seamless conversations.
+- **Secure**: User data is isolated; you only see and manage your own bots.
+- **Real-time Feedback**: Instant typing indicators and status updates during ingestion.
+
+----------------------------------------------------------------------------------------------------
+4. TECHNICAL NOTES FOR DEVELOPMENT
+
+- **Environment Variables**:
+  - Frontend: `.env` (API URL)
+  - Backend: `.env` (DB URL, JWT Secret, RAG Service URL, OpenAI Key)
+  - RAG: `.env` (Chroma path, Model settings)
+
+- **Database Sync**:
+  - Uses Prisma ORM. Run `npx prisma migrate dev` after schema changes.
+
+- **Running Request Flow**:
+  1. Frontend Request -> 2. Backend API (Auth/Validation) -> 3. DB (Metadata) -> 4. RAG Service (Embeddings/Generation).

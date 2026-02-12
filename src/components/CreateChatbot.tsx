@@ -6,19 +6,49 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Bot, ArrowRight } from 'lucide-react';
+import { Bot, ArrowRight, Loader2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 export default function CreateChatbot() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [language, setLanguage] = useState('english');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (name) {
-      // In production, this would create a new chatbot and get its ID
-      navigate('/knowledge-base/new');
+    if (!name.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const { data, ok, status } = await api<any>('/api/chatbots', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description,
+          config: { language },
+        }),
+      });
+
+      console.log('Create Chatbot Response:', { status, ok, data });
+
+      // Robust ID parsing
+      const chatbotId = data?.id || data?.chatbot?.id || data?.data?.id;
+
+      if ((ok || status === 201 || status === 200) && chatbotId) {
+        toast.success('Chatbot created successfully');
+        localStorage.setItem('activeChatbotId', chatbotId);
+        navigate(`/knowledge-base/${chatbotId}`);
+      } else {
+        throw new Error(data?.message || 'Failed to create chatbot');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to create chatbot');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -102,9 +132,18 @@ export default function CreateChatbot() {
               >
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1">
-                Create & Continue
-                <ArrowRight className="w-4 h-4 ml-2" />
+              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    Create & Continue
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
               </Button>
             </div>
           </form>

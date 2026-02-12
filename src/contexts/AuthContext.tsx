@@ -45,23 +45,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: 'include',
       });
       const json = await res.json();
-      if (res.ok && json?.data?.token) {
-        setAccessToken(json.data.token);
-        setUser(json.data.user ?? null);
-        return json.data.token;
+
+      const token = json?.data?.token || json?.token;
+
+      if (res.ok && token) {
+        setAccessToken(token);
+        localStorage.setItem('token', token);
+        setUser(json?.data?.user || json?.user || null);
+        return token;
       }
       setAccessToken(null);
+      localStorage.removeItem('token');
       setUser(null);
       return null;
     } catch {
       setAccessToken(null);
+      localStorage.removeItem('token');
       setUser(null);
       return null;
     }
   }, []);
 
   const loadUser = useCallback(async () => {
-    const token = accessToken ?? (await refresh());
+    const token = accessToken ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null) ?? (await refresh());
     if (!token) {
       setIsInitialized(true);
       return;
@@ -76,18 +82,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const json = await res.json();
         if (json?.data) {
           setUser(json.data);
-          if (!accessToken) setAccessToken(token);
+          if (!accessToken) {
+            setAccessToken(token);
+            localStorage.setItem('token', token);
+          }
         }
       } else {
         const again = await refresh();
         if (!again) {
           setUser(null);
           setAccessToken(null);
+          localStorage.removeItem('token');
         }
       }
     } catch {
       setUser(null);
       setAccessToken(null);
+      localStorage.removeItem('token');
     } finally {
       setIsInitialized(true);
     }
@@ -109,14 +120,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             credentials: 'include',
           }
         );
-        if (ok && data?.data?.token) {
-          setAccessToken(data.data.token);
-          setUser(data.data.user ?? null);
-          return { success: true };
+        if (ok) {
+          // Robust token parsing
+          const responseData = data as any;
+          const token = responseData?.data?.token || responseData?.token || responseData?.accessToken;
+          const user = responseData?.data?.user || responseData?.user;
+
+          console.log("LOGIN RESPONSE DEBUG:", { ok, hasToken: !!token, keys: Object.keys(responseData || {}) });
+
+          if (token) {
+            setAccessToken(token);
+            localStorage.setItem('token', token);
+            console.log("Token saved to localStorage");
+            if (user) setUser(user);
+            return { success: true };
+          }
         }
+
         const err = (data as { error?: string })?.error || (status === 401 ? 'Invalid email or password' : 'Login failed');
         return { success: false, error: err };
       } catch (e) {
+        console.error("Login Error:", e);
         return { success: false, error: (e as Error).message || 'Network error' };
       } finally {
         setIsLoading(false);
@@ -124,6 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     []
   );
+
+
 
   const register = useCallback(
     async (email: string, password: string, name?: string) => {
@@ -156,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       setAccessToken(null);
+      localStorage.removeItem('token');
     }
   }, []);
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -11,21 +11,29 @@ import { toast } from 'sonner';
 
 export default function Deployment() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const [domains, setDomains] = useState(['example.com', 'app.example.com']);
   const [newDomain, setNewDomain] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!id) {
+      toast.error('Please select a chatbot first');
+      navigate('/dashboard');
+    }
+  }, [id, navigate]);
+
   const embedCode = `<!-- Chatbot Widget -->
 <script>
   window.chatbotConfig = {
-    botId: 'demo-bot-123',
+    botId: '${id}',
     position: 'bottom-right'
   };
 </script>
-<script src="https://cdn.chatbot.app/widget.js"></script>`;
+<script src="https://botcraft-ai.netlify.app/widget.js"></script>`;
 
   const iframeCode = `<iframe
-  src="https://chat.example.com/embed/demo-bot-123"
+  src="https://botcraft-ai.netlify.app/embed/${id}"
   width="400"
   height="600"
   frameborder="0"
@@ -223,10 +231,10 @@ export default function Deployment() {
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">
-        <Button variant="outline" onClick={() => navigate('/preview/demo')}>
+        <Button variant="outline" onClick={() => navigate(`/preview/${id}`)}>
           Back to Preview
         </Button>
-        <Button onClick={() => navigate('/analytics/demo')}>
+        <Button onClick={() => navigate(`/analytics/${id}`)}>
           View Analytics
         </Button>
       </div>

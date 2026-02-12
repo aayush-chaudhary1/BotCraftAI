@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -7,12 +7,17 @@ import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
-import { Bot, ArrowRight, Settings, Palette, Send, X, MessageCircle } from 'lucide-react';
+import { Bot, ArrowRight, Settings, Palette, Send, X, MessageCircle, Loader2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 export default function ChatbotConfig() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState({
-    name: 'Customer Support Bot',
+    name: '',
     greeting: "Hi! I'm here to help. Ask me anything.",
     fallback: "I'm sorry, I don't have enough information to answer that. Please try rephrasing your question or contact our support team.",
     responseLength: 'medium',
@@ -30,10 +35,59 @@ export default function ChatbotConfig() {
     bubbleStyle: 'rounded',
   });
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!id) {
+      toast.error('Please select a chatbot');
+      navigate('/dashboard');
+      return;
+    }
+    loadConfig();
+  }, [id, navigate]);
+
+  const loadConfig = async () => {
+    try {
+      const { data, ok } = await api<any>(`/api/chatbots/${id}`);
+      if (ok && data) {
+        setConfig(prev => ({
+          ...prev,
+          name: data.name || '',
+          ...(data.config || {}),
+        }));
+      }
+    } catch (err) {
+      toast.error('Failed to load configuration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock save
-    navigate('/preview/demo');
+    if (!id) return;
+
+    setSaving(true);
+    try {
+      const { name, ...rest } = config;
+      const { ok } = await api(`/api/chatbots/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name,
+          config: rest,
+        }),
+      });
+
+      if (ok) {
+        toast.success('Configuration saved');
+        navigate(`/preview/${id}`);
+        // Refresh active chatbot if needed, but not critical
+      } else {
+        throw new Error('Failed to save');
+      }
+    } catch (err) {
+      toast.error('Failed to save configuration');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Avatar options
@@ -189,11 +243,10 @@ export default function ChatbotConfig() {
                         key={emoji}
                         type="button"
                         onClick={() => setConfig({ ...config, avatar: emoji })}
-                        className={`w-10 h-10 text-xl rounded-lg border-2 transition-all ${
-                          config.avatar === emoji
-                            ? 'border-blue-500 bg-blue-50 scale-110'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
+                        className={`w-10 h-10 text-xl rounded-lg border-2 transition-all ${config.avatar === emoji
+                          ? 'border-blue-500 bg-blue-50 scale-110'
+                          : 'border-gray-200 hover:border-gray-300'
+                          }`}
                       >
                         {emoji}
                       </button>
@@ -277,7 +330,7 @@ export default function ChatbotConfig() {
                   <Switch
                     id="theme"
                     checked={config.theme === 'dark'}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setConfig({ ...config, theme: checked ? 'dark' : 'light' })
                     }
                   />
@@ -330,7 +383,7 @@ export default function ChatbotConfig() {
                 <Switch
                   id="branding"
                   checked={config.showBranding}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={(checked) =>
                     setConfig({ ...config, showBranding: checked })
                   }
                 />
@@ -340,12 +393,21 @@ export default function ChatbotConfig() {
 
           {/* Navigation */}
           <div className="flex justify-between pt-4 pb-6">
-            <Button type="button" variant="outline" onClick={() => navigate('/knowledge-base/demo')}>
+            <Button type="button" variant="outline" onClick={() => navigate(`/knowledge-base/${id}`)}>
               Back
             </Button>
-            <Button type="submit">
-              Save & Preview
-              <ArrowRight className="w-4 h-4 ml-2" />
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Save & Preview
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
             </Button>
           </div>
         </form>
@@ -367,24 +429,21 @@ export default function ChatbotConfig() {
           </div>
 
           {/* Chat Widget Button */}
-          <div 
-            className={`absolute bottom-6 ${
-              config.position === 'bottom-right' ? 'right-6' : 'left-6'
-            } transition-all duration-300`}
+          <div
+            className={`absolute bottom-6 ${config.position === 'bottom-right' ? 'right-6' : 'left-6'
+              } transition-all duration-300`}
           >
             <div className="flex flex-col items-end gap-3">
               {/* Chat Window */}
-              <div 
-                className={`w-80 shadow-2xl overflow-hidden transition-all ${
-                  config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
-                } ${
-                  config.theme === 'dark' 
-                    ? 'bg-gray-800 text-white' 
+              <div
+                className={`w-80 shadow-2xl overflow-hidden transition-all ${config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
+                  } ${config.theme === 'dark'
+                    ? 'bg-gray-800 text-white'
                     : 'bg-white text-gray-900'
-                }`}
+                  }`}
               >
                 {/* Header */}
-                <div 
+                <div
                   className="p-4 flex items-center justify-between"
                   style={{ backgroundColor: config.primaryColor }}
                 >
@@ -401,20 +460,17 @@ export default function ChatbotConfig() {
                 </div>
 
                 {/* Messages */}
-                <div className={`p-4 space-y-3 h-64 overflow-y-auto ${
-                  config.theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
-                }`}>
+                <div className={`p-4 space-y-3 h-64 overflow-y-auto ${config.theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
+                  }`}>
                   {/* Bot Welcome */}
                   <div className="flex items-start gap-2">
                     <div className="text-lg">{config.avatar}</div>
-                    <div 
-                      className={`px-3 py-2 max-w-[80%] ${
-                        config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
-                      } ${
-                        config.theme === 'dark' 
-                          ? 'bg-gray-800 text-gray-100' 
+                    <div
+                      className={`px-3 py-2 max-w-[80%] ${config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
+                        } ${config.theme === 'dark'
+                          ? 'bg-gray-800 text-gray-100'
                           : 'bg-white text-gray-900'
-                      }`}
+                        }`}
                     >
                       <p className="text-sm">{config.welcomeMessage}</p>
                     </div>
@@ -423,14 +479,12 @@ export default function ChatbotConfig() {
                   {/* Bot Greeting */}
                   <div className="flex items-start gap-2">
                     <div className="text-lg">{config.avatar}</div>
-                    <div 
-                      className={`px-3 py-2 max-w-[80%] ${
-                        config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
-                      } ${
-                        config.theme === 'dark' 
-                          ? 'bg-gray-800 text-gray-100' 
+                    <div
+                      className={`px-3 py-2 max-w-[80%] ${config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
+                        } ${config.theme === 'dark'
+                          ? 'bg-gray-800 text-gray-100'
                           : 'bg-white text-gray-900'
-                      }`}
+                        }`}
                     >
                       <p className="text-sm">{config.greeting}</p>
                     </div>
@@ -438,10 +492,9 @@ export default function ChatbotConfig() {
 
                   {/* Sample User Message */}
                   <div className="flex items-end gap-2 justify-end">
-                    <div 
-                      className={`px-3 py-2 max-w-[80%] ${
-                        config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
-                      } text-white`}
+                    <div
+                      className={`px-3 py-2 max-w-[80%] ${config.bubbleStyle === 'rounded' ? 'rounded-2xl' : 'rounded-lg'
+                        } text-white`}
                       style={{ backgroundColor: config.accentColor }}
                     >
                       <p className="text-sm">How does this work?</p>
@@ -450,28 +503,24 @@ export default function ChatbotConfig() {
                 </div>
 
                 {/* Input */}
-                <div className={`p-3 border-t ${
-                  config.theme === 'dark' 
-                    ? 'bg-gray-800 border-gray-700' 
-                    : 'bg-white border-gray-200'
-                }`}>
+                <div className={`p-3 border-t ${config.theme === 'dark'
+                  ? 'bg-gray-800 border-gray-700'
+                  : 'bg-white border-gray-200'
+                  }`}>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       placeholder={config.placeholderText}
-                      className={`flex-1 px-3 py-2 ${
-                        config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-lg'
-                      } outline-none text-sm ${
-                        config.theme === 'dark'
+                      className={`flex-1 px-3 py-2 ${config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-lg'
+                        } outline-none text-sm ${config.theme === 'dark'
                           ? 'bg-gray-700 text-white placeholder-gray-400'
                           : 'bg-gray-100 text-gray-900 placeholder-gray-500'
-                      }`}
+                        }`}
                       disabled
                     />
                     <button
-                      className={`p-2 ${
-                        config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-lg'
-                      } text-white transition-colors`}
+                      className={`p-2 ${config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-lg'
+                        } text-white transition-colors`}
                       style={{ backgroundColor: config.primaryColor }}
                     >
                       <Send className="w-4 h-4" />
@@ -481,14 +530,12 @@ export default function ChatbotConfig() {
 
                 {/* Branding */}
                 {config.showBranding && (
-                  <div className={`px-4 py-2 text-center border-t ${
-                    config.theme === 'dark'
-                      ? 'bg-gray-800 border-gray-700'
-                      : 'bg-gray-50 border-gray-200'
-                  }`}>
-                    <p className={`text-xs ${
-                      config.theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                  <div className={`px-4 py-2 text-center border-t ${config.theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700'
+                    : 'bg-gray-50 border-gray-200'
                     }`}>
+                    <p className={`text-xs ${config.theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                      }`}>
                       Powered by BotCraft AI
                     </p>
                   </div>
@@ -497,9 +544,8 @@ export default function ChatbotConfig() {
 
               {/* Chat Bubble Button */}
               <button
-                className={`p-4 text-white shadow-lg transition-all hover:scale-110 ${
-                  config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-xl'
-                }`}
+                className={`p-4 text-white shadow-lg transition-all hover:scale-110 ${config.bubbleStyle === 'rounded' ? 'rounded-full' : 'rounded-xl'
+                  }`}
                 style={{ backgroundColor: config.primaryColor }}
               >
                 <MessageCircle className="w-6 h-6" />

@@ -72,7 +72,13 @@ export interface ChatInput {
 export interface ChatResponse {
   message: string;
   sessionId: string;
-  // Future: Will include sources/references when RAG is implemented
+  sources?: Array<{
+    documentId: string;
+    source: string;
+    snippet: string;
+    score: number;
+    metadata: any;
+  }>;
 }
 
 // Settings types

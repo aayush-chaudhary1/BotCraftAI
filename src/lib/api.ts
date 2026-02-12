@@ -32,13 +32,18 @@ async function doFetch(
     ...rest
   } = options;
   const url = path.startsWith('http') ? path : `${getApiBase()}${path}`;
-  const token = accessToken ?? getAccessToken?.() ?? null;
-  const reqHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
+  const token = accessToken ?? getAccessToken?.() ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+  const reqHeaders: Record<string, string> = {
     ...(headers as Record<string, string>),
   };
+
+  // Only set application/json if not FormData and not already set
+  if (!(rest.body instanceof FormData) && !reqHeaders['Content-Type']) {
+    reqHeaders['Content-Type'] = 'application/json';
+  }
+
   if (token) {
-    (reqHeaders as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    reqHeaders['Authorization'] = `Bearer ${token}`;
   }
   const res = await fetch(url, {
     ...rest,
@@ -46,11 +51,15 @@ async function doFetch(
     credentials: 'include',
   });
 
-  if (res.status === 401 && retryOn401 && refresh) {
-    const newToken = await refresh();
+  if (res.status === 401 && retryOn401) {
+    console.log('API: 401 detected, attempting refresh...');
+    const newToken = refresh ? await refresh() : null;
     if (newToken) {
+      console.log('API: Refresh successful, retrying request...');
       (reqHeaders as Record<string, string>)['Authorization'] = `Bearer ${newToken}`;
       return fetch(url, { ...rest, headers: reqHeaders, credentials: 'include' });
+    } else {
+      console.error('API: Refresh failed or no refresh function provided.');
     }
   }
   return res;
@@ -60,12 +69,30 @@ export async function api<T = unknown>(
   path: string,
   options: ApiOptions = {}
 ): Promise<{ data: T; ok: boolean; status: number }> {
+  // If we're in a browser environment, we might be able to access the auth context refresh function
+  // indirectly if we exported it, but since we can't easily import the hook here (rules of hooks),
+  // we rely on the component passing it OR we rely on the caller to handle 401s if they didn't pass refresh.
+  // However, since we are using a global api helper, we can't easily inject the hook.
+  // BUT: we can try to read the token again from localStorage in case it was refreshed elsewhere.
+
   const res = await doFetch(path, options);
+
+  // If status is 401 and we didn't retry (or retry failed), we should probably clear the token
+  if (res.status === 401 && typeof localStorage !== 'undefined') {
+    // localStorage.removeItem('token'); // Don't be too aggressive, maybe it was just a glitch
+  }
+
   let data: T;
   const ct = res.headers.get('content-type');
   if (ct?.includes('application/json')) {
     try {
-      data = (await res.json()) as T;
+      const json = await res.json();
+      // Auto-unwrap backend standard response { success: true, data: ... }
+      if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
+        data = json.data as T;
+      } else {
+        data = json as T;
+      }
     } catch {
       data = undefined as T;
     }

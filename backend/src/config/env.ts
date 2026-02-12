@@ -66,4 +66,8 @@ export const config = {
       'text/markdown',
     ],
   },
+  rag: {
+    url: process.env.RAG_URL || 'http://127.0.0.1:9000',
+    timeout: parseInt(process.env.RAG_TIMEOUT_MS || '20000', 10),
+  },
 } as const;

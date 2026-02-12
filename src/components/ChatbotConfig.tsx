@@ -11,6 +11,8 @@ import { Bot, ArrowRight, Settings, Palette, Send, X, MessageCircle, Loader2 } f
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 
+
+
 export default function ChatbotConfig() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -79,7 +81,6 @@ export default function ChatbotConfig() {
       if (ok) {
         toast.success('Configuration saved');
         navigate(`/preview/${id}`);
-        // Refresh active chatbot if needed, but not critical
       } else {
         throw new Error('Failed to save');
       }

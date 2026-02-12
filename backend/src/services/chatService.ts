@@ -5,6 +5,7 @@
 import { prisma } from '../config/database';
 import { ChatInput, ChatResponse } from '../types';
 import { NotFoundError, AuthorizationError } from '../utils/errors';
+import { RagClient } from './ragClient';
 
 export class ChatService {
   /**
@@ -64,24 +65,33 @@ export class ChatService {
       },
     });
 
-    // TODO: Future RAG integration point
-    // This is where we will:
-    // 1. Query vector database for relevant document chunks
-    // 2. Generate AI response using retrieved context
-    // 3. Return response with source references
+    // RAG Integration
+    let responseContent = '';
+    let sources: any[] = [];
+    let isError = false;
 
-    // Placeholder response for now
-    const placeholderResponse = `I received your message: "${input.message}". AI functionality is not yet implemented. This is a placeholder response.`;
+    try {
+      console.log(`[RAG] Querying for bot ${chatbotId}: "${input.message}"`);
+      const ragResponse = await RagClient.query(chatbotId, input.message);
+      console.log(`[RAG] Response:`, ragResponse);
+
+      responseContent = ragResponse.answer;
+      sources = ragResponse.sources || [];
+    } catch (error) {
+      console.error('[RAG] Query failed:', error);
+      responseContent = "I'm sorry, I'm having trouble accessing my knowledge base right now. Please try again later.";
+      isError = true;
+    }
 
     // Save assistant response
     await prisma.message.create({
       data: {
         sessionId,
         role: 'assistant',
-        content: placeholderResponse,
+        content: responseContent,
         metadata: {
-          placeholder: true,
-          // Future: Will include source documents and confidence scores
+          sources,
+          isError,
         },
       },
     });
@@ -93,8 +103,9 @@ export class ChatService {
     });
 
     return {
-      message: placeholderResponse,
+      message: responseContent,
       sessionId,
+      sources,
     };
   }
 

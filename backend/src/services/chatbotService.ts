@@ -35,7 +35,7 @@ export class ChatbotService {
    * Get all chatbots for a user
    */
   static async getUserChatbots(userId: string) {
-    return await prisma.chatbot.findMany({
+    const chatbots = await prisma.chatbot.findMany({
       where: { userId },
       include: {
         _count: {
@@ -47,6 +47,12 @@ export class ChatbotService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return chatbots.map(bot => ({
+      ...bot,
+      documents: bot._count.documents,
+      conversations: bot._count.chatSessions,
+    }));
   }
 
   /**

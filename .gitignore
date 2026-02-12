@@ -4,3 +4,17 @@ node_modules
 .env.*.local
 dist
 *.log
+
+# Python junk
+.venv/
+newrag/.venv/
+__pycache__/
+*.pyc
+newrag/**/__pycache__/
+
+# Data folder (usually should not be in git)
+newrag/data/
+
+# Node + builds
+node_modules/
+dist/

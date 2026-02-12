@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Bot, Send, RotateCcw, User } from 'lucide-react';
+import { Bot, Send, RotateCcw, User, Loader2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
@@ -12,60 +14,140 @@ interface Message {
   timestamp: Date;
 }
 
-const initialMessages: Message[] = [
-  {
-    id: '1',
-    sender: 'bot',
-    text: "Hi! I'm here to help. Ask me anything.",
-    timestamp: new Date(),
-  },
-];
-
 export default function ChatPreview() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { id } = useParams<{ id: string }>();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [chatbot, setChatbot] = useState<any>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const mockResponses = [
-    "Refund requests are processed within 5 working days. Please provide your order number to initiate the refund process.",
-    "Our customer support team is available 24/7. You can reach us via email at support@example.com or through this chat.",
-    "To update your account information, go to Settings > Profile and make the necessary changes.",
-    "Yes, we offer free shipping on orders over $50. The estimated delivery time is 3-5 business days.",
-    "You can track your order using the tracking number sent to your email after shipment.",
-  ];
+  useEffect(() => {
+    if (id) {
+      loadChatbot();
+    }
+  }, [id]);
 
-  const handleSend = (e: React.FormEvent) => {
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const loadChatbot = async () => {
+    try {
+      const { data, ok } = await api<any>(`/api/chatbots/${id}`);
+      if (ok && data) {
+        setChatbot(data);
+        // Add greeting
+        if (data.config?.greeting) {
+          setMessages([{
+            id: 'init',
+            sender: 'bot',
+            text: data.config.greeting,
+            timestamp: new Date(),
+          }]);
+        }
+      }
+    } catch (err) {
+      toast.error('Failed to load chatbot');
+    }
+  };
+
+  useEffect(() => {
+    if (id) {
+      const storedSession = localStorage.getItem(`previewSession:${id}`);
+      if (storedSession) setSessionId(storedSession);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id && sessionId) {
+      localStorage.setItem(`previewSession:${id}`, sessionId);
+    }
+  }, [id, sessionId]);
+
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || !id) return;
+
+    const userText = input.trim();
+    if (!userText) return;
+    setInput('');
 
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       sender: 'user',
-      text: input,
+      text: userText,
       timestamp: new Date(),
     };
-    setMessages([...messages, userMessage]);
-    setInput('');
+    setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
+    try {
+      const payload: { message: string; sessionId?: string } = { message: userText };
+      if (sessionId && sessionId.trim().length > 0) {
+        payload.sessionId = sessionId;
+      }
+
+      const { data, ok } = await api<{ message: string; sessionId?: string; answer?: string }>(`/api/chatbots/${id}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (ok && data) {
+        if (data.sessionId && data.sessionId.trim().length > 0) {
+          setSessionId(data.sessionId);
+          // Persist immediately to ensure it survives refresh if useEffect is slow
+          localStorage.setItem(`previewSession:${id}`, data.sessionId);
+        }
+
+        // Backend might return 'answer' or 'message'
+        const botText = data.answer || data.message || "I didn't get a response.";
+
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          sender: 'bot',
+          text: botText,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, botMessage]);
+      } else {
+        throw new Error('Failed to get response');
+      }
+    } catch (err) {
+      toast.error('Failed to send message');
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
         sender: 'bot',
-        text: mockResponses[Math.floor(Math.random() * mockResponses.length)],
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, botMessage]);
+        text: "Sorry, I'm having trouble connecting right now.",
+        timestamp: new Date()
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleReset = () => {
-    setMessages(initialMessages);
-    setInput('');
+    if (id) localStorage.removeItem(`previewSession:${id}`);
+    setSessionId(null);
+    setMessages([]);
+    if (chatbot?.config?.greeting) {
+      setMessages([{
+        id: 'init',
+        sender: 'bot',
+        text: chatbot.config.greeting,
+        timestamp: new Date(),
+      }]);
+    }
   };
 
   return (
@@ -92,8 +174,10 @@ export default function ChatPreview() {
               <Bot className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <CardTitle>Customer Support Bot</CardTitle>
-              <CardDescription>Online</CardDescription>
+              <CardTitle>{chatbot?.name || 'Loading...'}</CardTitle>
+              <CardDescription>
+                {chatbot ? 'Online' : 'Connecting...'}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -103,16 +187,14 @@ export default function ChatPreview() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex gap-3 ${
-                message.sender === 'user' ? 'flex-row-reverse' : ''
-              }`}
+              className={`flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : ''
+                }`}
             >
               <div
-                className={`p-2 rounded-full ${
-                  message.sender === 'user'
-                    ? 'bg-blue-600'
-                    : 'bg-blue-100'
-                }`}
+                className={`p-2 rounded-full ${message.sender === 'user'
+                  ? 'bg-blue-600'
+                  : 'bg-blue-100'
+                  }`}
               >
                 {message.sender === 'user' ? (
                   <User className="w-5 h-5 text-white" />
@@ -121,16 +203,14 @@ export default function ChatPreview() {
                 )}
               </div>
               <div
-                className={`flex-1 max-w-[70%] ${
-                  message.sender === 'user' ? 'items-end' : ''
-                }`}
+                className={`flex-1 max-w-[70%] ${message.sender === 'user' ? 'items-end' : ''
+                  }`}
               >
                 <div
-                  className={`rounded-lg p-3 ${
-                    message.sender === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
+                  className={`rounded-lg p-3 ${message.sender === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-900'
+                    }`}
                 >
                   <p>{message.text}</p>
                 </div>
@@ -158,6 +238,7 @@ export default function ChatPreview() {
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </CardContent>
 
         {/* Input */}
@@ -181,13 +262,13 @@ export default function ChatPreview() {
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">
-        <Button variant="outline" onClick={() => navigate('/config/demo')}>
+        <Button variant="outline" onClick={() => navigate(`/config/${id}`)}>
           Back to Configuration
         </Button>
-        <Button onClick={() => navigate('/deploy/demo')}>
+        <Button onClick={() => navigate(`/deploy/${id}`)}>
           Continue to Deployment
         </Button>
       </div>
-    </div>
+    </div >
   );
 }

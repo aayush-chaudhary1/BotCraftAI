@@ -53,6 +53,8 @@ export function verifyPasswordResetToken(token: string): { userId: string; email
 }
 
 export function generateAccessToken(userId: string, email: string): string {
+  console.log("JWT SIGN SECRET BEING USED:", process.env.JWT_ACCESS_TOKEN_SECRET, process.env.JWT_SECRET);
+  console.log("JWT TOKEN CREATED FOR USER:", userId);
   return jwt.sign(
     { userId, email },
     config.jwt.accessSecret,

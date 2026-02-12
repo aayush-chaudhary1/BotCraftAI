@@ -21,6 +21,9 @@ export const authenticate = async (
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
+    console.log("AUTH HEADER RECEIVED:", req.headers.authorization);
+    console.log("JWT VERIFY SECRET BEING USED:", process.env.JWT_ACCESS_TOKEN_SECRET, process.env.JWT_SECRET);
+
     try {
       const decoded = jwt.verify(token, config.jwt.accessSecret) as {
         userId: string;
